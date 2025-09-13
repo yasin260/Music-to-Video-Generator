@@ -51,15 +51,9 @@
 - **فایل موسیقی ورودی** با نامی که در کد مشخص شده است (به‌صورت پیش‌فرض `song.mp3`)  
 - توصیه: استفاده از **Google Colab** برای دسترسی به GPU  
 
----
 
-## 📝 نصب کتابخانه‌ها
 
-```bash
-!pip install pydub whisper-openai google-generativeai python-dotenv diffusers transformers accelerate torch torchvision imageio[ffmpeg]
-!pip install --upgrade Pillow
 
----
 
 ## ✅ راه اندازی
 
