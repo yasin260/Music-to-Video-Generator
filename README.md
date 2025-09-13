@@ -1,434 +1,55 @@
-{
-  "nbformat": 4,
-  "nbformat_minor": 0,
-  "metadata": {
-    "colab": {
-      "provenance": [],
-      "gpuType": "T4"
-    },
-    "kernelspec": {
-      "name": "python3",
-      "display_name": "Python 3"
-    },
-    "language_info": {
-      "name": "python"
-    },
-    "accelerator": "GPU"
-  },
-  "cells": [
-    {
-      "cell_type": "markdown",
-      "source": [
-        "# 🎵 Music-to-Video Generation using AI  \n"
-      ],
-      "metadata": {
-        "id": "wOVwPVODeN_f"
-      }
-    },
-    {
-      "cell_type": "markdown",
-      "source": [
-        "# 🎬 عنوان پروژه: Music-to-Video Generator  \n",
-        "\n",
-        "\n",
-        "### 🏫 درس  \n",
-        "**سیستم‌های نهفته و بی‌درنگ**\n",
-        "\n",
-        "### 👨‍🏫 استاد  \n",
-        "**مهندس مهدی سیفی‌پور**\n",
-        "\n",
-        "### 👥 اعضای تیم  \n",
-        "- سید مهدی منجم  \n",
-        "- علیرضا میرزایی  \n",
-        "- محمدحسین فرهادیان  \n",
-        "\n",
-        "### 📅 تاریخ  \n",
-        "تابستان 1404  \n",
-        "\n",
-        "---\n"
-      ],
-      "metadata": {
-        "id": "EONLFgqleXHP"
-      }
-    },
-    {
-      "cell_type": "markdown",
-      "source": [
-        "## ✨ چکیده  \n",
-        "\n",
-        "در این پروژه، سامانه‌ای هوشمند طراحی و پیاده‌سازی شده است که قابلیت **تبدیل فایل صوتی موسیقی به ویدئو** را فراهم می‌سازد.  \n",
-        "فرآیند کلی شامل چهار مرحله‌ی اصلی است:  \n",
-        "1. **پردازش صوت** و استخراج متن (اشعار) **Whisper**  \n",
-        "2. **تولید پرامپت خلاقانه** بر اساس متن استخراج‌شده توسط مدل زبانی **Gemini**  \n",
-        "3. **تولید تصویر اولیه** **Stable Diffusion XL**  \n",
-        "4. **تبدیل تصویر به ویدئو** **Stable Video Diffusion**  \n",
-        "\n",
-        "خروجی نهایی سامانه، ویدیویی است که با محتوای موسیقی ورودی هماهنگ بوده و جنبه‌های هنری، احساسی و بصری آن را به‌صورت خلاقانه بازآفرینی می‌کند.  \n",
-        "\n",
-        "این سیستم نمونه‌ای از **کاربردهای میان‌رشته‌ای هوش مصنوعی** در ترکیب حوزه‌های پردازش زبان طبیعی، بینایی ماشین و تولید محتوای چندرسانه‌ای به شمار می‌رود.  \n"
-      ],
-      "metadata": {
-        "id": "S4rEVvJrez_Z"
-      }
-    },
-    {
-      "cell_type": "code",
-      "execution_count": null,
-      "metadata": {
-        "id": "4LWlNJ5f3Ikg",
-        "collapsed": true
-      },
-      "outputs": [],
-      "source": [
-        "!pip install pydub whisper-openai google-generativeai python-dotenv diffusers transformers accelerate torch torchvision imageio[ffmpeg]\n",
-        "!pip install --upgrade Pillow"
-      ]
-    },
-    {
-      "cell_type": "code",
-      "source": [
-        "from google.colab import userdata\n",
-        "GEMINI_API_KEY = userdata.get('GEMINI_API_KEY')"
-      ],
-      "metadata": {
-        "id": "XwNWDIFH4Zv_"
-      },
-      "execution_count": null,
-      "outputs": []
-    },
-    {
-      "cell_type": "markdown",
-      "source": [
-        "## 📌 گام یک: استخراج متن  \n",
-        "در نخستین گام، فایل موسیقی ورودی در قالب **ام پی تری** دریافت و برای پردازش‌های بعدی به فرمت **ویو** تبدیل شد.  \n",
-        "سپس این فایل به مدل **ویسپر** داده شد تا محتوای صوتی آن تحلیل شده و متن (اشعار) موجود در موسیقی استخراج گردد.  \n",
-        "در نهایت با استفاده از **جمینی** پرامپت متناسب با موسیقی تولید و ذخیره می‌شود.\n",
-        "\n",
-        "این مرحله، پایه و اساس سایر مراحل پروژه محسوب می‌شود؛ زیرا متن استخراج‌شده مبنای تولید پرامپت خلاقانه و در نهایت تولید تصویر و ویدئو قرار می‌گیرد.  \n"
-      ],
-      "metadata": {
-        "id": "c-kDRjkThF-Q"
-      }
-    },
-    {
-      "cell_type": "code",
-      "source": [
-        "import os\n",
-        "import whisper\n",
-        "import google.generativeai as genai\n",
-        "from pydub import AudioSegment\n",
-        "from google.colab import userdata\n",
-        "\n",
-        "# ---------------- تنظیمات اولیه ----------------\n",
-        "AUDIO_INPUT_PATH = \"song.mp3\"\n",
-        "WAV_OUTPUT_PATH = \"input.wav\"\n",
-        "LYRICS_PATH = \"lyrics.txt\"\n",
-        "PROMPT_PATH = \"video_prompt.txt\"\n",
-        "GEMINI_API_KEY = userdata.get(\"GEMINI_API_KEY\")\n",
-        "\n",
-        "# ---------------- تبدیل mp3 به wav ----------------\n",
-        "def convert_mp3_to_wav(input_path, output_path):\n",
-        "    print(\"Converting from MP3 to WAV...\")\n",
-        "    try:\n",
-        "        sound = AudioSegment.from_file(input_path)\n",
-        "        sound.export(output_path, format=\"wav\")\n",
-        "        print(\"Conversion completed.\")\n",
-        "        return True\n",
-        "    except Exception as e:\n",
-        "        print(f\"Error during MP3 to WAV conversion: {e}\")\n",
-        "        return False\n",
-        "\n",
-        "# ---------------- استخراج متن با Whisper ----------------\n",
-        "def extract_lyrics(wav_path):\n",
-        "    print(\"Extracting text with Whisper...\")\n",
-        "    try:\n",
-        "        model = whisper.load_model(\"base\")\n",
-        "        result = model.transcribe(wav_path)\n",
-        "        text = result[\"text\"]\n",
-        "        print(\"Text extracted.\")\n",
-        "        return text.strip()\n",
-        "    except Exception as e:\n",
-        "        print(f\"Error during text extraction with Whisper: {e}\")\n",
-        "        return None\n",
-        "\n",
-        "# ---------------- تولید پرامپت با Gemini ----------------\n",
-        "def generate_prompt_from_lyrics(lyrics, api_key):\n",
-        "    print(\"Producing prompts with Gemini...\")\n",
-        "    if not api_key:\n",
-        "        print(\"GEMINI_API_KEY is not set.\")\n",
-        "        return None\n",
-        "\n",
-        "    try:\n",
-        "        genai.configure(api_key=api_key)\n",
-        "        model = genai.GenerativeModel(\"models/gemini-2.0-flash\")\n",
-        "\n",
-        "        system_prompt = f\"\"\"\n",
-        "You are a creative assistant. Based on the lyrics of the song below, create a cinematic script for a text-to-video model. The script should clearly describe the mood, visual style, colors, environment, and emotions.\n",
-        "\n",
-        "Lyrics:\n",
-        "\n",
-        "{lyrics}\n",
-        "\n",
-        "Write it creatively and concisely, suitable for AI video production tools like Stable Video or ModelScope, in a few lines and short.\n",
-        "\n",
-        "\"\"\"\n",
-        "        response = model.generate_content(system_prompt)\n",
-        "        print(\"Prompt generated.\")\n",
-        "        return response.text.strip()\n",
-        "    except Exception as e:\n",
-        "        print(f\"Error during prompt generation with Gemini: {e}\")\n",
-        "        return None\n",
-        "\n",
-        "# ---------------- اجرای اصلی ----------------\n",
-        "def main():\n",
-        "    if not os.path.exists(AUDIO_INPUT_PATH):\n",
-        "        print(f\"Audio file '{AUDIO_INPUT_PATH}' not found.\")\n",
-        "        return\n",
-        "\n",
-        "    # مرحله 1: تبدیل فایل صوتی\n",
-        "    if not convert_mp3_to_wav(AUDIO_INPUT_PATH, WAV_OUTPUT_PATH):\n",
-        "        return\n",
-        "\n",
-        "    # مرحله 2: استخراج متن\n",
-        "    lyrics = extract_lyrics(WAV_OUTPUT_PATH)\n",
-        "    if not lyrics:\n",
-        "        return\n",
-        "\n",
-        "    with open(LYRICS_PATH, \"w\", encoding=\"utf-8\") as f:\n",
-        "        f.write(lyrics)\n",
-        "\n",
-        "    # مرحله 3: تولید پرامپت\n",
-        "    prompt = generate_prompt_from_lyrics(lyrics, GEMINI_API_KEY)\n",
-        "    if not prompt:\n",
-        "        print(\"\\nCould not generate prompt. Exiting.\")\n",
-        "        return\n",
-        "\n",
-        "    # مرحله 4: ذخیره پرامپت\n",
-        "    with open(PROMPT_PATH, \"w\", encoding=\"utf-8\") as f:\n",
-        "        f.write(prompt)\n",
-        "\n",
-        "    print(f\"\\n--- Prompt generated by Gemini ---\\n{prompt}\\n----------------------------------\")\n",
-        "    print(\"\\nEverything is ready. Lyrics and prompt saved.\")\n",
-        "\n",
-        "if __name__ == \"__main__\":\n",
-        "    main()"
-      ],
-      "metadata": {
-        "id": "0PIfShu15Ahy",
-        "collapsed": true
-      },
-      "execution_count": null,
-      "outputs": []
-    },
-    {
-      "cell_type": "markdown",
-      "source": [
-        "## 📌 گام دوم: تولید تصویر اولیه\n",
-        "\n",
-        "در این مرحله، متنی که توسط مدل جِمینی بر اساس اشعار موسیقی تولید شده بود،\n",
-        "به عنوان پرامپت ورودی به مدل استیبل دیفیوشن ایکس‌ال داده شد.\n",
-        "این مدل وظیفه داشت تا بر اساس توصیفات متنی، یک تصویر اولیه با کیفیت بالا ایجاد کند.\n",
-        "\n",
-        "تصویر به دست آمده در این فرآیند، نقطه شروع برای تولید ویدئو محسوب می‌شود.\n",
-        "در این گام همچنین تنظیماتی مانند اندازه تصویر و کنترل بذر تصادفی انتخاب شد\n",
-        "تا تکرارپذیری و یکپارچگی در نتایج تضمین گردد.\n",
-        "\n",
-        "در نتیجه، خروجی این مرحله یک تصویر است که ارتباط مستقیمی با فضای معنایی\n",
-        "اشعار موسیقی دارد و مبنای گام سوم یعنی تولید ویدئو قرار می‌گیرد."
-      ],
-      "metadata": {
-        "id": "WgaMTHe2iCZo"
-      }
-    },
-    {
-      "cell_type": "code",
-      "source": [
-        "# @title Default title text\n",
-        "!pip install diffusers transformers accelerate torch torchvision imageio[ffmpeg]\n",
-        "!pip install --upgrade Pillow"
-      ],
-      "metadata": {
-        "collapsed": true,
-        "id": "IbCroPJ99R9Y"
-      },
-      "execution_count": null,
-      "outputs": []
-    },
-    {
-      "cell_type": "code",
-      "source": [
-        "import os\n",
-        "import torch\n",
-        "from diffusers import DiffusionPipeline\n",
-        "from PIL import Image\n",
-        "\n",
-        "# ---------------- تنظیمات اولیه ----------------\n",
-        "PROMPT_PATH = \"video_prompt.txt\"\n",
-        "INITIAL_IMAGE_PATH = \"initial_image.png\"\n",
-        "\n",
-        "# ---------------- تولید تصویر با Stable Diffusion XL ----------------\n",
-        "def generate_initial_image(prompt, output_path):\n",
-        "    print(\"Generating initial image with Stable Diffusion XL...\")\n",
-        "    try:\n",
-        "        # Load the text-to-image model (SDXL)\n",
-        "        txt2img_pipe = DiffusionPipeline.from_pretrained(\n",
-        "            \"stabilityai/stable-diffusion-xl-base-1.0\",\n",
-        "            torch_dtype=torch.float16,\n",
-        "            variant=\"fp16\"\n",
-        "        )\n",
-        "        txt2img_pipe.to(\"cuda\")\n",
-        "\n",
-        "        # Generate the initial image from the prompt\n",
-        "        generator = torch.manual_seed(42)\n",
-        "        initial_image = txt2img_pipe(prompt=prompt, generator=generator).images[0]\n",
-        "        initial_image.save(output_path)\n",
-        "        print(\"Initial image generated and saved.\")\n",
-        "\n",
-        "        # Clear GPU memory\n",
-        "        del txt2img_pipe\n",
-        "        torch.cuda.empty_cache()\n",
-        "\n",
-        "        return True\n",
-        "    except Exception as e:\n",
-        "        print(f\"Error during image generation: {e}\")\n",
-        "        return False\n",
-        "\n",
-        "# ---------------- اجرای اصلی برای تولید تصویر اولیه ----------------\n",
-        "def main_image_generation():\n",
-        "    if not os.path.exists(PROMPT_PATH):\n",
-        "        print(f\"Prompt file '{PROMPT_PATH}' not found. Please run the first cell to generate the prompt.\")\n",
-        "        return\n",
-        "\n",
-        "    with open(PROMPT_PATH, \"r\", encoding=\"utf-8\") as f:\n",
-        "        prompt = f.read()\n",
-        "\n",
-        "    print(f\"\\n--- Using saved prompt to generate initial image ---\\n{prompt}\\n----------------------------------\")\n",
-        "\n",
-        "    if generate_initial_image(prompt, INITIAL_IMAGE_PATH):\n",
-        "        print(\"\\nInitial image generation completed successfully.\")\n",
-        "    else:\n",
-        "        print(\"\\nInitial image generation failed.\")\n",
-        "\n",
-        "if __name__ == \"__main__\":\n",
-        "    main_image_generation()"
-      ],
-      "metadata": {
-        "collapsed": true,
-        "id": "qjmNJycM_xeq"
-      },
-      "execution_count": null,
-      "outputs": []
-    },
-    {
-      "cell_type": "markdown",
-      "source": [
-        "##📌 گام سوم: تولید ویدئو\n",
-        "\n",
-        "در این مرحله، تصویر اولیه تولیدشده توسط مدل استیبل دیفیوشن ایکس‌ال به عنوان ورودی به مدل استیبل ویدئو دیفیوشن داده شد تا یک ویدئو کوتاه ایجاد گردد.\n",
-        "این مدل بر اساس توصیفات پرامپت و ویژگی‌های تصویر اولیه، فریم‌های متوالی و حرکت‌های طبیعی را تولید می‌کند.\n",
-        "\n",
-        "تنظیماتی مانند تعداد فریم‌ها، اندازه و رزولوشن تصویر، و شدت نویز حرکتی اعمال شد تا ویدئو نهایی از نظر بصری هماهنگ و روان باشد.\n",
-        "خروجی این مرحله، یک ویدئو هنری و خلاقانه است که بیانگر فضای معنایی و احساسی اشعار موسیقی بوده و نتیجه نهایی پروژه را تشکیل می‌دهد.\n",
-        "\n",
-        "❌**محدودیت این قسمت میزان استفاده از منابع پردازشی گرافیکی ارائه شده توسط گوگل کلب بوده که برای تولید ویدئو تنظیمات خروجی روی کیفیت پایین تنظیم شده است❌**"
-      ],
-      "metadata": {
-        "id": "EI3MsjhFjX3Q"
-      }
-    },
-    {
-      "cell_type": "code",
-      "source": [
-        "import os\n",
-        "import torch\n",
-        "from diffusers import StableVideoDiffusionPipeline\n",
-        "from diffusers.utils import load_image, export_to_video\n",
-        "from PIL import Image\n",
-        "import imageio\n",
-        "\n",
-        "# ---------------- تنظیمات اولیه ----------------\n",
-        "INITIAL_IMAGE_PATH = \"initial_image.png\"\n",
-        "VIDEO_OUTPUT_PATH = \"generated_video.mp4\"\n",
-        "\n",
-        "# ---------------- تولید ویدیو با Stable Video Diffusion ----------------\n",
-        "def generate_video_from_image(image_path, output_path):\n",
-        "    print(\"Generating video from the initial image with Stable Video Diffusion...\")\n",
-        "    try:\n",
-        "        # بارگذاری مدل ساخت ویدیو\n",
-        "        pipe = StableVideoDiffusionPipeline.from_pretrained(\n",
-        "            \"stabilityai/stable-video-diffusion-img2vid-xt\",\n",
-        "            torch_dtype=torch.float16,\n",
-        "            variant=\"fp16\"\n",
-        "        )\n",
-        "        pipe.to(\"cuda\")\n",
-        "\n",
-        "        # بارگذاری تصویر اولیه\n",
-        "        initial_image = load_image(image_path)\n",
-        "\n",
-        "        # --- تغییر اول: کاهش ابعاد تصویر ---\n",
-        "        # ما رزولوشن رو برای کاهش مصرف حافظه کمتر می‌کنیم\n",
-        "        target_size = 512\n",
-        "        width, height = initial_image.size\n",
-        "        if height > width:\n",
-        "            new_height = target_size\n",
-        "            new_width = int(new_height * width / height)\n",
-        "        else:\n",
-        "            new_width = target_size\n",
-        "            new_height = int(new_width * height / width)\n",
-        "\n",
-        "        new_width = new_width - new_width % 8\n",
-        "        new_height = new_height - new_height % 8\n",
-        "\n",
-        "        initial_image = initial_image.resize((new_width, new_height))\n",
-        "        print(f\"Image resized to: {initial_image.size}\")\n",
-        "\n",
-        "\n",
-        "        # تولید فریم‌های ویدیو\n",
-        "        # --- تغییر دوم: کاهش decode_chunk_size ---\n",
-        "        video_frames = pipe(\n",
-        "            initial_image,\n",
-        "            num_frames=25,\n",
-        "            decode_chunk_size=4, # این عدد از 8 به 4 کاهش یافت\n",
-        "            motion_bucket_id=127,\n",
-        "            noise_aug_strength=0.1\n",
-        "        ).frames[0]\n",
-        "\n",
-        "        print(\"Video frames generated. Saving the video...\")\n",
-        "\n",
-        "        # ذخیره فریم‌ها به صورت فایل ویدیویی mp4\n",
-        "        export_to_video(video_frames, output_path, fps=7)\n",
-        "\n",
-        "        # پاک‌سازی حافظه GPU\n",
-        "        del pipe\n",
-        "        torch.cuda.empty_cache()\n",
-        "\n",
-        "        print(f\"Video saved successfully at: {output_path}\")\n",
-        "        return True\n",
-        "\n",
-        "    except Exception as e:\n",
-        "        print(f\"Error during video generation: {e}\")\n",
-        "        return False\n",
-        "\n",
-        "# ---------------- اجرای اصلی برای تولید ویدیو ----------------\n",
-        "def main_video_generation():\n",
-        "    if not os.path.exists(INITIAL_IMAGE_PATH):\n",
-        "        print(f\"Initial image '{INITIAL_IMAGE_PATH}' not found. Please run the previous cells first.\")\n",
-        "        return\n",
-        "\n",
-        "    if generate_video_from_image(INITIAL_IMAGE_PATH, VIDEO_OUTPUT_PATH):\n",
-        "        print(\"\\nVideo generation completed successfully.\")\n",
-        "    else:\n",
-        "        print(\"\\nVideo generation failed.\")\n",
-        "\n",
-        "if __name__ == \"__main__\":\n",
-        "    main_video_generation()"
-      ],
-      "metadata": {
-        "id": "aRezV5E_BJhM",
-        "collapsed": true
-      },
-      "execution_count": null,
-      "outputs": []
-    }
-  ]
-}
+# 🎵 Music-to-Video Generator
+
+سامانه‌ای هوشمند که قابلیت **تبدیل فایل موسیقی به ویدئو هنری و خلاقانه** را فراهم می‌کند، با بهره‌گیری از مدل‌های هوش مصنوعی متن‌باز و پیشرفته.
+
+---
+
+## 🎬 معرفی پروژه
+
+این پروژه با هدف تولید ویدئو کوتاه هماهنگ با موسیقی ورودی طراحی شده است و از **پردازش زبان طبیعی، بینایی ماشین و تولید محتوای چندرسانه‌ای** بهره می‌برد.  
+فرآیند کلی پروژه شامل چهار مرحله اصلی است:
+
+1. **پردازش صوت و استخراج متن**: با مدل **Whisper** متن اشعار از فایل صوتی استخراج می‌شود.  
+2. **تولید پرامپت خلاقانه**: متن استخراج‌شده به مدل **Gemini** داده شده و پرامپت مناسب تولید می‌شود.  
+3. **تولید تصویر اولیه**: با استفاده از **Stable Diffusion XL**، یک تصویر با کیفیت بالا بر اساس پرامپت ایجاد می‌شود.  
+4. **تبدیل تصویر به ویدئو**: مدل **Stable Video Diffusion** تصویر اولیه را به ویدئو کوتاه و هماهنگ با موسیقی تبدیل می‌کند.
+
+---
+
+## 🏫 درس و استاد
+
+- درس: **سیستم‌های نهفته و بی‌درنگ**  
+- استاد: **مهندس مهدی سیفی‌پور**  
+
+## 👥 اعضای تیم
+
+- سید مهدی منجم  
+- علیرضا میرزایی  
+- محمدحسین فرهادیان  
+
+## 📅 تاریخ
+
+تابستان 1404
+
+---
+
+## ✨ ویژگی‌ها
+
+- استخراج خودکار متن موسیقی از فایل صوتی MP3  
+- تولید پرامپت خلاقانه برای تولید محتوای تصویری  
+- تولید تصویر با کیفیت بالا توسط Stable Diffusion XL  
+- تولید ویدئو کوتاه با فریم‌های طبیعی و هماهنگ با موسیقی  
+- نمونه‌ای از کاربرد هوش مصنوعی میان‌رشته‌ای در هنر و موسیقی  
+
+---
+
+## ⚙️ پیش‌نیازها
+
+- Python 3.9+  
+- GPU با حافظه مناسب (توصیه می‌شود برای تولید ویدئو)  
+
+### نصب کتابخانه‌ها
+
+```bash
+pip install pydub whisper-openai google-generativeai python-dotenv diffusers transformers accelerate torch torchvision imageio[ffmpeg]
+pip install --upgrade Pillow
